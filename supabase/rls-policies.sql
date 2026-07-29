@@ -15,6 +15,52 @@ SET position = r.new_position
 FROM ranked r
 WHERE c.id = r.id;
 
+-- 将 tags 列从 text[] 迁移为 jsonb，支持带颜色的标签
+-- 采用分步迁移法，避免 ALTER COLUMN USING 中不允许子查询的限制
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'cards' AND column_name = 'tags'
+  ) THEN
+    -- 如果是 text[] 类型，迁移为 jsonb
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = 'cards'
+        AND column_name = 'tags'
+        AND data_type = 'ARRAY'
+    ) THEN
+      -- 第1步：新增临时 jsonb 列
+      ALTER TABLE cards ADD COLUMN tags_new jsonb;
+
+      -- 第2步：将旧数据转换后写入新列（UPDATE 中允许子查询）
+      UPDATE cards
+      SET tags_new = (
+        SELECT jsonb_agg(
+          jsonb_build_object(
+            'name', tag_item,
+            'color', '#6366F1'
+          )
+        )
+        FROM unnest(tags) AS tag_item
+      )
+      WHERE tags IS NOT NULL;
+
+      -- 第3步：删除旧列
+      ALTER TABLE cards DROP COLUMN tags;
+
+      -- 第4步：重命名新列为 tags
+      ALTER TABLE cards RENAME COLUMN tags_new TO tags;
+    END IF;
+  ELSE
+    -- tags 列不存在，直接新建
+    ALTER TABLE cards ADD COLUMN tags jsonb DEFAULT '[]'::jsonb;
+  END IF;
+END
+$$;
+
 ALTER TABLE cards ENABLE ROW LEVEL SECURITY;
 
 -- 清理旧策略（可重复执行）

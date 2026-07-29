@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Card } from "@/types/card";
+import type { Card, Tag } from "@/types/card";
 import { ExternalLink, Pencil, Trash2, GripVertical } from "lucide-react";
 
 function formatDate(dateStr: string) {
@@ -15,9 +15,18 @@ function formatDate(dateStr: string) {
   }).format(new Date(dateStr));
 }
 
-function normalizeTags(tags: Card["tags"]): string[] {
+function normalizeTags(tags: Card["tags"]): Tag[] {
   if (!tags) return [];
-  if (Array.isArray(tags)) return tags.filter(Boolean);
+  if (Array.isArray(tags)) {
+    return tags
+      .map((t) => {
+        if (typeof t === "string") {
+          return { name: t, color: "#6366F1" };
+        }
+        return t as Tag;
+      })
+      .filter((t) => t && t.name);
+  }
   return [];
 }
 
@@ -57,7 +66,10 @@ export default function SortableCard({
   return (
     <article
       ref={setNodeRef}
-      style={style}
+      style={{
+        ...style,
+        animationDelay: `${Math.min(index, 12) * 60}ms`,
+      }}
       className="group relative flex flex-col rounded-2xl border border-white/80 bg-white/80 p-5 shadow-sm backdrop-blur-sm transition hover:border-violet-200/80 hover:shadow-md hover:shadow-violet-500/10 animate-fade-in-up touch-none"
       {...attributes}
     >
@@ -115,12 +127,17 @@ export default function SortableCard({
 
       {tags.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {tags.map((tag) => (
+          {tags.map((tag, i) => (
             <span
-              key={tag}
-              className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-100"
+              key={`${tag.name}-${i}`}
+              className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+              style={{
+                backgroundColor: `${tag.color}15`,
+                color: tag.color,
+                border: `1px solid ${tag.color}40`,
+              }}
             >
-              {tag}
+              {tag.name}
             </span>
           ))}
         </div>

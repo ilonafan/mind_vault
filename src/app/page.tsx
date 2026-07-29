@@ -74,6 +74,7 @@ export default function Home() {
       title: data.title,
       content: data.content || null,
       url: data.url || null,
+      tags: data.tags.length > 0 ? data.tags : null,
     };
 
     if (cardId) {
