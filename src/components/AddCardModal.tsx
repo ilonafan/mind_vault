@@ -1,15 +1,20 @@
 "use client";
 
+import type { Card } from "@/types/card";
 import { X } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
+type CardFormData = { title: string; content: string; url: string };
+
 type AddCardModalProps = {
   open: boolean;
+  card?: Card | null;
   onClose: () => void;
-  onSave: (data: { title: string; content: string; url: string }) => Promise<void>;
+  onSave: (data: CardFormData) => Promise<void>;
 };
 
-export default function AddCardModal({ open, onClose, onSave }: AddCardModalProps) {
+export default function AddCardModal({ open, card, onClose, onSave }: AddCardModalProps) {
+  const isEditing = Boolean(card);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [url, setUrl] = useState("");
@@ -23,8 +28,19 @@ export default function AddCardModal({ open, onClose, onSave }: AddCardModalProp
       setUrl("");
       setError(null);
       setSaving(false);
+      return;
     }
-  }, [open]);
+    if (card) {
+      setTitle(card.title);
+      setContent(card.content ?? "");
+      setUrl(card.url ?? "");
+    } else {
+      setTitle("");
+      setContent("");
+      setUrl("");
+    }
+    setError(null);
+  }, [open, card]);
 
   useEffect(() => {
     if (!open) return;
@@ -68,7 +84,7 @@ export default function AddCardModal({ open, onClose, onSave }: AddCardModalProp
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="add-card-title"
+      aria-labelledby="card-modal-title"
     >
       <button
         type="button"
@@ -78,8 +94,8 @@ export default function AddCardModal({ open, onClose, onSave }: AddCardModalProp
       />
       <div className="relative w-full max-w-lg rounded-2xl border border-white/60 bg-white/95 p-6 shadow-2xl shadow-slate-900/10 animate-fade-in-up">
         <div className="mb-6 flex items-center justify-between">
-          <h2 id="add-card-title" className="text-xl font-semibold text-slate-900">
-            新增灵感卡片
+          <h2 id="card-modal-title" className="text-xl font-semibold text-slate-900">
+            {isEditing ? "编辑灵感卡片" : "新增灵感卡片"}
           </h2>
           <button
             type="button"
@@ -152,7 +168,7 @@ export default function AddCardModal({ open, onClose, onSave }: AddCardModalProp
               disabled={saving}
               className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? "保存中..." : "保存"}
+              {saving ? "保存中..." : isEditing ? "更新" : "保存"}
             </button>
           </div>
         </form>

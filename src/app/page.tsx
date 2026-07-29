@@ -1,9 +1,10 @@
 "use client";
 
 import AddCardModal from "@/components/AddCardModal";
+import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import { getSupabase } from "@/lib/supabase";
 import type { Card } from "@/types/card";
-import { ExternalLink, Lightbulb, Plus, Sparkles } from "lucide-react";
+import { ExternalLink, Lightbulb, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 function formatDate(dateStr: string) {
@@ -27,6 +28,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [deletingCard, setDeletingCard] = useState<Card | null>(null);
 
   const fetchCards = useCallback(async () => {
     setError(null);
@@ -46,14 +49,53 @@ export default function Home() {
     fetchCards().finally(() => setLoading(false));
   }, [fetchCards]);
 
-  async function handleSave(data: { title: string; content: string; url: string }) {
-    const { error: insertError } = await getSupabase().from("cards").insert({
-      title: data.title,
-      content: data.content || null,
-      url: data.url || null,
-    });
+  function openCreateModal() {
+    setEditingCard(null);
+    setModalOpen(true);
+  }
 
-    if (insertError) throw new Error(insertError.message);
+  function openEditModal(card: Card) {
+    setEditingCard(card);
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    setEditingCard(null);
+  }
+
+  async function handleSave(data: { title: string; content: string; url: string }) {
+    if (editingCard) {
+      const { error: updateError } = await getSupabase()
+        .from("cards")
+        .update({
+          title: data.title,
+          content: data.content || null,
+          url: data.url || null,
+        })
+        .eq("id", editingCard.id);
+
+      if (updateError) throw new Error(updateError.message);
+    } else {
+      const { error: insertError } = await getSupabase().from("cards").insert({
+        title: data.title,
+        content: data.content || null,
+        url: data.url || null,
+      });
+
+      if (insertError) throw new Error(insertError.message);
+    }
+    await fetchCards();
+  }
+
+  async function handleDelete() {
+    if (!deletingCard) return;
+    const { error: deleteError } = await getSupabase()
+      .from("cards")
+      .delete()
+      .eq("id", deletingCard.id);
+
+    if (deleteError) throw new Error(deleteError.message);
     await fetchCards();
   }
 
@@ -75,7 +117,7 @@ export default function Home() {
           </div>
           <button
             type="button"
-            onClick={() => setModalOpen(true)}
+            onClick={openCreateModal}
             className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-violet-600/25 transition hover:bg-violet-700 hover:shadow-lg hover:shadow-violet-600/30 active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
@@ -117,7 +159,7 @@ export default function Home() {
             </p>
             <button
               type="button"
-              onClick={() => setModalOpen(true)}
+              onClick={openCreateModal}
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700"
             >
               <Plus className="h-4 w-4" />
@@ -131,10 +173,29 @@ export default function Home() {
               return (
                 <article
                   key={card.id}
-                  className="group flex flex-col rounded-2xl border border-white/80 bg-white/80 p-5 shadow-sm backdrop-blur-sm transition hover:border-violet-200/80 hover:shadow-md hover:shadow-violet-500/10 animate-fade-in-up"
+                  className="group relative flex flex-col rounded-2xl border border-white/80 bg-white/80 p-5 shadow-sm backdrop-blur-sm transition hover:border-violet-200/80 hover:shadow-md hover:shadow-violet-500/10 animate-fade-in-up"
                   style={{ animationDelay: `${Math.min(index, 12) * 60}ms` }}
                 >
-                  <h3 className="text-base font-semibold leading-snug text-slate-900 group-hover:text-violet-700 transition-colors">
+                  <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(card)}
+                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
+                      aria-label={`编辑 ${card.title}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingCard(card)}
+                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                      aria-label={`删除 ${card.title}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <h3 className="pr-16 text-base font-semibold leading-snug text-slate-900 transition-colors group-hover:text-violet-700">
                     {card.title}
                   </h3>
 
@@ -184,8 +245,16 @@ export default function Home() {
 
       <AddCardModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        card={editingCard}
+        onClose={closeModal}
         onSave={handleSave}
+      />
+
+      <DeleteConfirmModal
+        open={Boolean(deletingCard)}
+        title={deletingCard?.title ?? ""}
+        onClose={() => setDeletingCard(null)}
+        onConfirm={handleDelete}
       />
     </div>
   );
