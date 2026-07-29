@@ -4,13 +4,13 @@ import type { Card } from "@/types/card";
 import { X } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
-type CardFormData = { title: string; content: string; url: string };
+export type CardFormData = { title: string; content: string; url: string };
 
 type AddCardModalProps = {
   open: boolean;
   card?: Card | null;
   onClose: () => void;
-  onSave: (data: CardFormData) => Promise<void>;
+  onSave: (data: CardFormData, cardId?: string) => Promise<void>;
 };
 
 export default function AddCardModal({ open, card, onClose, onSave }: AddCardModalProps) {
@@ -64,11 +64,14 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
     setSaving(true);
     setError(null);
     try {
-      await onSave({
-        title: title.trim(),
-        content: content.trim(),
-        url: url.trim(),
-      });
+      await onSave(
+        {
+          title: title.trim(),
+          content: content.trim(),
+          url: url.trim(),
+        },
+        card?.id
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败，请重试");

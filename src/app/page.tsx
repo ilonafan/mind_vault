@@ -1,6 +1,6 @@
 "use client";
 
-import AddCardModal from "@/components/AddCardModal";
+import AddCardModal, { type CardFormData } from "@/components/AddCardModal";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import { getSupabase } from "@/lib/supabase";
 import type { Card } from "@/types/card";
@@ -64,38 +64,55 @@ export default function Home() {
     setEditingCard(null);
   }
 
-  async function handleSave(data: { title: string; content: string; url: string }) {
-    if (editingCard) {
-      const { error: updateError } = await getSupabase()
+  async function handleSave(data: CardFormData, cardId?: string) {
+    const payload = {
+      title: data.title,
+      content: data.content || null,
+      url: data.url || null,
+    };
+
+    if (cardId) {
+      const { data: updated, error: updateError } = await getSupabase()
         .from("cards")
-        .update({
-          title: data.title,
-          content: data.content || null,
-          url: data.url || null,
-        })
-        .eq("id", editingCard.id);
+        .update(payload)
+        .eq("id", cardId)
+        .select();
 
       if (updateError) throw new Error(updateError.message);
+      if (!updated?.length) {
+        throw new Error(
+          "更新未生效：Supabase 拒绝了此操作。请在 SQL Editor 中执行 supabase/rls-policies.sql 添加 UPDATE 策略。"
+        );
+      }
     } else {
-      const { error: insertError } = await getSupabase().from("cards").insert({
-        title: data.title,
-        content: data.content || null,
-        url: data.url || null,
-      });
+      const { data: inserted, error: insertError } = await getSupabase()
+        .from("cards")
+        .insert(payload)
+        .select();
 
       if (insertError) throw new Error(insertError.message);
+      if (!inserted?.length) {
+        throw new Error(
+          "新增未生效：Supabase 拒绝了此操作。请在 SQL Editor 中执行 supabase/rls-policies.sql 添加 INSERT 策略。"
+        );
+      }
     }
     await fetchCards();
   }
 
-  async function handleDelete() {
-    if (!deletingCard) return;
-    const { error: deleteError } = await getSupabase()
+  async function handleDelete(cardId: string) {
+    const { data: deleted, error: deleteError } = await getSupabase()
       .from("cards")
       .delete()
-      .eq("id", deletingCard.id);
+      .eq("id", cardId)
+      .select();
 
     if (deleteError) throw new Error(deleteError.message);
+    if (!deleted?.length) {
+      throw new Error(
+        "删除未生效：Supabase 拒绝了此操作。请在 SQL Editor 中执行 supabase/rls-policies.sql 添加 DELETE 策略。"
+      );
+    }
     await fetchCards();
   }
 
@@ -253,6 +270,7 @@ export default function Home() {
       <DeleteConfirmModal
         open={Boolean(deletingCard)}
         title={deletingCard?.title ?? ""}
+        cardId={deletingCard?.id}
         onClose={() => setDeletingCard(null)}
         onConfirm={handleDelete}
       />

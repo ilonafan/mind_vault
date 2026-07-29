@@ -6,13 +6,15 @@ import { useEffect, useState } from "react";
 type DeleteConfirmModalProps = {
   open: boolean;
   title: string;
+  cardId?: string;
   onClose: () => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: (cardId: string) => Promise<void>;
 };
 
 export default function DeleteConfirmModal({
   open,
   title,
+  cardId,
   onClose,
   onConfirm,
 }: DeleteConfirmModalProps) {
@@ -40,10 +42,14 @@ export default function DeleteConfirmModal({
   }, [open, onClose]);
 
   async function handleConfirm() {
+    if (!cardId) {
+      setError("无法删除：缺少卡片 ID");
+      return;
+    }
     setDeleting(true);
     setError(null);
     try {
-      await onConfirm();
+      await onConfirm(cardId);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败，请重试");
