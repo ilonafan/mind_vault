@@ -5,4 +5,5 @@ export type Card = {
   url: string | null;
   tags: string[] | null;
   created_at: string;
+  position: number;
 };

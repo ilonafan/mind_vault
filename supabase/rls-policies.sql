@@ -1,6 +1,20 @@
 -- MindVault cards 表完整 RLS 策略
 -- 在 Supabase Dashboard → SQL Editor 中执行此文件
 
+-- 添加 position 列用于拖拽排序
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS position integer DEFAULT 0;
+
+-- 为现有卡片按创建时间倒序设置初始 position
+WITH ranked AS (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at DESC) - 1 AS new_position
+  FROM cards
+  WHERE position = 0 OR position IS NULL
+)
+UPDATE cards c
+SET position = r.new_position
+FROM ranked r
+WHERE c.id = r.id;
+
 ALTER TABLE cards ENABLE ROW LEVEL SECURITY;
 
 -- 清理旧策略（可重复执行）

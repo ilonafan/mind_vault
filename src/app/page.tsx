@@ -2,26 +2,23 @@
 
 import AddCardModal, { type CardFormData } from "@/components/AddCardModal";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
+import SortableCard from "@/components/SortableCard";
 import { getSupabase } from "@/lib/supabase";
 import type { Card } from "@/types/card";
-import { ExternalLink, Lightbulb, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Lightbulb, Plus, Sparkles } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
 import { useCallback, useEffect, useState } from "react";
-
-function formatDate(dateStr: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(dateStr));
-}
-
-function normalizeTags(tags: Card["tags"]): string[] {
-  if (!tags) return [];
-  if (Array.isArray(tags)) return tags.filter(Boolean);
-  return [];
-}
 
 export default function Home() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -31,12 +28,20 @@ export default function Home() {
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [deletingCard, setDeletingCard] = useState<Card | null>(null);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
   const fetchCards = useCallback(async () => {
     setError(null);
     const { data, error: fetchError } = await getSupabase()
       .from("cards")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("position", { ascending: true });
 
     if (fetchError) {
       setError(fetchError.message);
@@ -85,9 +90,10 @@ export default function Home() {
         );
       }
     } else {
+      const position = cards.length;
       const { data: inserted, error: insertError } = await getSupabase()
         .from("cards")
-        .insert(payload)
+        .insert({ ...payload, position })
         .select();
 
       if (insertError) throw new Error(insertError.message);
@@ -114,6 +120,35 @@ export default function Home() {
       );
     }
     await fetchCards();
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const currentItems = cards;
+    const oldIndex = currentItems.findIndex((item) => item.id === active.id);
+    const newIndex = currentItems.findIndex((item) => item.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newItems = [...currentItems];
+    const [moved] = newItems.splice(oldIndex, 1);
+    newItems.splice(newIndex, 0, moved);
+
+    setCards(newItems);
+
+    try {
+      const updates = newItems.map((card, index) =>
+        getSupabase()
+          .from("cards")
+          .update({ position: index })
+          .eq("id", card.id)
+      );
+      await Promise.all(updates);
+    } catch (err) {
+      console.error("Failed to save positions:", err);
+      fetchCards();
+    }
   }
 
   return (
@@ -184,79 +219,28 @@ export default function Home() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {cards.map((card, index) => {
-              const tags = normalizeTags(card.tags);
-              return (
-                <article
-                  key={card.id}
-                  className="group relative flex flex-col rounded-2xl border border-white/80 bg-white/80 p-5 shadow-sm backdrop-blur-sm transition hover:border-violet-200/80 hover:shadow-md hover:shadow-violet-500/10 animate-fade-in-up"
-                  style={{ animationDelay: `${Math.min(index, 12) * 60}ms` }}
-                >
-                  <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(card)}
-                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
-                      aria-label={`编辑 ${card.title}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeletingCard(card)}
-                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                      aria-label={`删除 ${card.title}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <h3 className="pr-16 text-base font-semibold leading-snug text-slate-900 transition-colors group-hover:text-violet-700">
-                    {card.title}
-                  </h3>
-
-                  {card.content && (
-                    <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600 line-clamp-4">
-                      {card.content}
-                    </p>
-                  )}
-
-                  {card.url && (
-                    <a
-                      href={card.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-violet-600 transition hover:text-violet-800"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{card.url}</span>
-                    </a>
-                  )}
-
-                  {tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-100"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <time
-                    dateTime={card.created_at}
-                    className="mt-4 block text-xs text-slate-400"
-                  >
-                    {formatDate(card.created_at)}
-                  </time>
-                </article>
-              );
-            })}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={cards.map((card) => card.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {cards.map((card, index) => (
+                  <SortableCard
+                    key={card.id}
+                    card={card}
+                    index={index}
+                    onEdit={openEditModal}
+                    onDelete={setDeletingCard}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </main>
 
