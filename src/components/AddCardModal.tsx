@@ -1,7 +1,8 @@
 "use client";
 
-import type { Card, Tag } from "@/types/card";
-import { X, Tag as TagIcon } from "lucide-react";
+import type { Card, Tag, TagDefinition } from "@/types/card";
+import { getSupabase } from "@/lib/supabase";
+import { X, Tag as TagIcon, Plus, Check } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
 export type CardFormData = {
@@ -12,24 +13,10 @@ export type CardFormData = {
 };
 
 const TAG_COLORS = [
-  "#EF4444", // red
-  "#F97316", // orange
-  "#F59E0B", // amber
-  "#EAB308", // yellow
-  "#84CC16", // lime
-  "#22C55E", // green
-  "#10B981", // emerald
-  "#14B8A6", // teal
-  "#06B6D4", // cyan
-  "#3B82F6", // blue
-  "#6366F1", // indigo
-  "#8B5CF6", // violet
-  "#A855F7", // purple
-  "#D946EF", // fuchsia
-  "#EC4899", // pink
-  "#F43F5E", // rose
-  "#64748B", // slate
-  "#0EA5E9", // sky
+  "#EF4444", "#F97316", "#F59E0B", "#EAB308", "#84CC16",
+  "#22C55E", "#10B981", "#14B8A6", "#06B6D4", "#3B82F6",
+  "#6366F1", "#8B5CF6", "#A855F7", "#D946EF", "#EC4899",
+  "#F43F5E", "#64748B", "#0EA5E9",
 ];
 
 type AddCardModalProps = {
@@ -45,8 +32,10 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
   const [content, setContent] = useState("");
   const [url, setUrl] = useState("");
   const [tags, setTags] = useState<Tag[]>([]);
+  const [availableTags, setAvailableTags] = useState<TagDefinition[]>([]);
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState(TAG_COLORS[10]);
+  const [showNewTagForm, setShowNewTagForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,8 +45,10 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
       setContent("");
       setUrl("");
       setTags([]);
+      setAvailableTags([]);
       setTagName("");
       setTagColor(TAG_COLORS[10]);
+      setShowNewTagForm(false);
       setError(null);
       setSaving(false);
       return;
@@ -75,7 +66,9 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
     }
     setTagName("");
     setTagColor(TAG_COLORS[10]);
+    setShowNewTagForm(false);
     setError(null);
+    fetchTags();
   }, [open, card]);
 
   useEffect(() => {
@@ -91,19 +84,61 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
     };
   }, [open, onClose]);
 
-  function addTag() {
-    const trimmed = tagName.trim();
-    if (!trimmed) return;
-    if (tags.some((t) => t.name === trimmed)) {
-      setTagName("");
-      return;
+  async function fetchTags() {
+    const { data, error: fetchError } = await getSupabase()
+      .from("tags")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (!fetchError) {
+      setAvailableTags(data ?? []);
     }
-    setTags((prev) => [...prev, { name: trimmed, color: tagColor }]);
-    setTagName("");
+  }
+
+  function isTagSelected(tagDef: TagDefinition): boolean {
+    return tags.some((t) => t.name === tagDef.name);
+  }
+
+  function toggleTag(tagDef: TagDefinition) {
+    if (isTagSelected(tagDef)) {
+      setTags((prev) => prev.filter((t) => t.name !== tagDef.name));
+    } else {
+      setTags((prev) => [...prev, { name: tagDef.name, color: tagDef.color }]);
+    }
   }
 
   function removeTag(index: number) {
     setTags((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function addNewTag() {
+    const trimmed = tagName.trim();
+    if (!trimmed) return;
+    if (availableTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
+      setError("标签已存在");
+      return;
+    }
+
+    // Insert into Supabase tags table
+    const { data: inserted, error: insertError } = await getSupabase()
+      .from("tags")
+      .insert({ name: trimmed, color: tagColor })
+      .select();
+
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+
+    if (inserted && inserted.length > 0) {
+      setAvailableTags((prev) => [...prev, inserted[0]]);
+      setTags((prev) => [...prev, { name: inserted[0].name, color: inserted[0].color }]);
+    }
+
+    setTagName("");
+    setTagColor(TAG_COLORS[10]);
+    setShowNewTagForm(false);
+    setError(null);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -202,7 +237,6 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onBlur={() => {
-              // 离开输入框时，如果没有协议头且有内容，自动加上 https://
                 if (url && !/^https?:\/\//i.test(url.trim())) {
                   setUrl(`https://${url.trim()}`);
                 }
@@ -216,7 +250,7 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">标签</label>
             <div className="rounded-xl border border-slate-200 bg-white p-3">
-              {/* Existing tags */}
+              {/* Selected tags */}
               {tags.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-1.5">
                   {tags.map((tag, index) => (
@@ -244,36 +278,90 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
                 </div>
               )}
 
-              {/* Add tag input */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <TagIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      value={tagName}
-                      onChange={(e) => setTagName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addTag();
-                        }
-                      }}
-                      placeholder="输入标签名称"
-                      className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
-                    />
+              {/* Available tags from DB */}
+              {availableTags.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1.5 text-xs font-medium text-slate-400">从已有标签中选择</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableTags.map((tagDef) => {
+                      const selected = isTagSelected(tagDef);
+                      return (
+                        <button
+                          key={tagDef.id}
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => toggleTag(tagDef)}
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition"
+                          style={{
+                            backgroundColor: selected ? `${tagDef.color}20` : `${tagDef.color}10`,
+                            color: selected ? tagDef.color : `${tagDef.color}80`,
+                            border: `1px solid ${selected ? tagDef.color : `${tagDef.color}30`}`,
+                          }}
+                        >
+                          {selected && <Check className="h-3 w-3" />}
+                          {tagDef.name}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <button
-                    type="button"
-                    onClick={addTag}
-                    className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
-                  >
-                    添加
-                  </button>
                 </div>
+              )}
 
-                {/* Color presets */}
-                <div className="flex items-center gap-2">
+              {/* Add new tag */}
+              {showNewTagForm ? (
+                <div className="space-y-2 border-t border-slate-100 pt-3">
+                  <p className="text-xs font-medium text-slate-400">创建新标签</p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <TagIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={tagName}
+                        onChange={(e) => setTagName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addNewTag();
+                          }
+                          if (e.key === "Escape") {
+                            setShowNewTagForm(false);
+                          }
+                        }}
+                        placeholder="新标签名称"
+                        className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="color"
+                        value={tagColor}
+                        onChange={(e) => setTagColor(e.target.value)}
+                        className="h-8 w-8 cursor-pointer rounded-full border-0 bg-transparent p-0"
+                        aria-label="选择颜色"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addNewTag}
+                      disabled={!tagName.trim()}
+                      className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      添加
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewTagForm(false);
+                        setTagName("");
+                        setTagColor(TAG_COLORS[10]);
+                      }}
+                      className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100"
+                      aria-label="取消"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
                     {TAG_COLORS.map((c) => (
                       <button
@@ -284,14 +372,11 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
                         className="h-6 w-6 rounded-full ring-offset-1 transition"
                         style={{
                           backgroundColor: c,
-                          boxShadow:
-                            tagColor === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : undefined,
+                          boxShadow: tagColor === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : undefined,
                         }}
                         aria-label={`选择颜色 ${c}`}
                       />
                     ))}
-                  </div>
-                  <div className="relative ml-1">
                     <input
                       type="color"
                       value={tagColor}
@@ -302,7 +387,20 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
                     />
                   </div>
                 </div>
-              </div>
+              ) : (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => {
+                    setShowNewTagForm(true);
+                    setError(null);
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 transition hover:text-violet-800"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  创建新标签
+                </button>
+              )}
             </div>
           </div>
 

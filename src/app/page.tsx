@@ -3,9 +3,10 @@
 import AddCardModal, { type CardFormData } from "@/components/AddCardModal";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import SortableCard from "@/components/SortableCard";
+import TagManagerModal from "@/components/TagManagerModal";
 import { getSupabase } from "@/lib/supabase";
-import type { Card } from "@/types/card";
-import { Lightbulb, Plus, Sparkles } from "lucide-react";
+import type { Card, TagDefinition } from "@/types/card";
+import { Lightbulb, Plus, Sparkles, Tag as TagIcon, Settings2, X } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -18,7 +19,7 @@ import {
   SortableContext,
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function Home() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -27,6 +28,11 @@ export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [deletingCard, setDeletingCard] = useState<Card | null>(null);
+
+  // Tag management
+  const [allTags, setAllTags] = useState<TagDefinition[]>([]);
+  const [selectedFilterTags, setSelectedFilterTags] = useState<string[]>([]);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -50,9 +56,45 @@ export default function Home() {
     setCards(data ?? []);
   }, []);
 
+  const fetchTags = useCallback(async () => {
+    const { data, error: fetchError } = await getSupabase()
+      .from("tags")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (!fetchError) {
+      setAllTags(data ?? []);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchCards().finally(() => setLoading(false));
-  }, [fetchCards]);
+    Promise.all([
+      fetchCards().finally(() => setLoading(false)),
+      fetchTags(),
+    ]);
+  }, [fetchCards, fetchTags]);
+
+  // AND filter: card must have ALL selected tags
+  const filteredCards = useMemo(() => {
+    if (selectedFilterTags.length === 0) return cards;
+    return cards.filter((card) => {
+      if (!card.tags || card.tags.length === 0) return false;
+      const cardTagNames = card.tags.map((t) => t.name);
+      return selectedFilterTags.every((filterTag) => cardTagNames.includes(filterTag));
+    });
+  }, [cards, selectedFilterTags]);
+
+  function toggleFilterTag(tagName: string) {
+    setSelectedFilterTags((prev) =>
+      prev.includes(tagName)
+        ? prev.filter((t) => t !== tagName)
+        : [...prev, tagName]
+    );
+  }
+
+  function clearFilter() {
+    setSelectedFilterTags([]);
+  }
 
   function openCreateModal() {
     setEditingCard(null);
@@ -168,16 +210,66 @@ export default function Home() {
               <p className="hidden text-xs text-slate-500 sm:block">收集与管理你的灵感碎片</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-violet-600/25 transition hover:bg-violet-700 hover:shadow-lg hover:shadow-violet-600/30 active:scale-[0.98]"
-          >
-            <Plus className="h-4 w-4" />
-            <span>新增卡片</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTagManagerOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-800"
+              aria-label="管理标签"
+            >
+              <Settings2 className="h-4 w-4" />
+              <span className="hidden sm:inline">管理标签</span>
+            </button>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-violet-600/25 transition hover:bg-violet-700 hover:shadow-lg hover:shadow-violet-600/30 active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" />
+              <span>新增卡片</span>
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* Tag filter bar */}
+      {allTags.length > 0 && (
+        <div className="border-b border-white/40 bg-white/40 backdrop-blur-xl animate-fade-in">
+          <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 sm:px-6 lg:px-8">
+            <TagIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            <div className="flex flex-wrap gap-1.5">
+              {allTags.map((tag) => {
+                const isActive = selectedFilterTags.includes(tag.name);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => toggleFilterTag(tag.name)}
+                    className="rounded-full px-2.5 py-0.5 text-xs font-medium transition"
+                    style={{
+                      backgroundColor: isActive ? `${tag.color}20` : `${tag.color}10`,
+                      color: isActive ? tag.color : `${tag.color}70`,
+                      border: `1px solid ${isActive ? tag.color : `${tag.color}20`}`,
+                    }}
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedFilterTags.length > 0 && (
+              <button
+                type="button"
+                onClick={clearFilter}
+                className="ml-auto flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-3 w-3" />
+                清除筛选
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -201,23 +293,41 @@ export default function Home() {
               重试
             </button>
           </div>
-        ) : cards.length === 0 ? (
+        ) : filteredCards.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-100">
               <Sparkles className="h-8 w-8 text-violet-500" />
             </div>
-            <h2 className="text-xl font-semibold text-slate-800">还没有灵感卡片</h2>
-            <p className="mt-2 max-w-sm text-sm text-slate-500">
-              点击右上角「新增卡片」，开始记录你的第一个灵感吧
-            </p>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700"
-            >
-              <Plus className="h-4 w-4" />
-              新增卡片
-            </button>
+            {selectedFilterTags.length > 0 ? (
+              <>
+                <h2 className="text-xl font-semibold text-slate-800">没有匹配的卡片</h2>
+                <p className="mt-2 max-w-sm text-sm text-slate-500">
+                  当前筛选条件没有匹配的卡片，试试调整筛选标签
+                </p>
+                <button
+                  type="button"
+                  onClick={clearFilter}
+                  className="mt-6 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700"
+                >
+                  清除筛选
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-semibold text-slate-800">还没有灵感卡片</h2>
+                <p className="mt-2 max-w-sm text-sm text-slate-500">
+                  点击右上角「新增卡片」，开始记录你的第一个灵感吧
+                </p>
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  新增卡片
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <DndContext
@@ -230,7 +340,7 @@ export default function Home() {
               strategy={rectSortingStrategy}
             >
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {cards.map((card, index) => (
+                {filteredCards.map((card, index) => (
                   <SortableCard
                     key={card.id}
                     card={card}
@@ -258,6 +368,12 @@ export default function Home() {
         cardId={deletingCard?.id}
         onClose={() => setDeletingCard(null)}
         onConfirm={handleDelete}
+      />
+
+      <TagManagerModal
+        open={tagManagerOpen}
+        onClose={() => setTagManagerOpen(false)}
+        onTagsChanged={fetchTags}
       />
     </div>
   );
