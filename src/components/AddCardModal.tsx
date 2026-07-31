@@ -2,6 +2,7 @@
 
 import type { Card, Tag, TagDefinition } from "@/types/card";
 import { getSupabase } from "@/lib/supabase";
+import { TAG_COLORS, DEFAULT_COLOR_INDEX } from "@/lib/tag-colors";
 import { X, Tag as TagIcon, Plus, Check } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -11,13 +12,6 @@ export type CardFormData = {
   url: string;
   tags: Tag[];
 };
-
-const TAG_COLORS = [
-  "#EF4444", "#F97316", "#F59E0B", "#EAB308", "#84CC16",
-  "#22C55E", "#10B981", "#14B8A6", "#06B6D4", "#3B82F6",
-  "#6366F1", "#8B5CF6", "#A855F7", "#D946EF", "#EC4899",
-  "#F43F5E", "#64748B", "#0EA5E9",
-];
 
 type AddCardModalProps = {
   open: boolean;
@@ -34,10 +28,21 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
   const [tags, setTags] = useState<Tag[]>([]);
   const [availableTags, setAvailableTags] = useState<TagDefinition[]>([]);
   const [tagName, setTagName] = useState("");
-  const [tagColor, setTagColor] = useState(TAG_COLORS[10]);
+  const [tagColor, setTagColor] = useState(TAG_COLORS[DEFAULT_COLOR_INDEX]);
   const [showNewTagForm, setShowNewTagForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function fetchTags() {
+    const { data, error: fetchError } = await getSupabase()
+      .from("tags")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (!fetchError) {
+      setAvailableTags(data ?? []);
+    }
+  }
 
   useEffect(() => {
     if (!open) {
@@ -47,7 +52,7 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
       setTags([]);
       setAvailableTags([]);
       setTagName("");
-      setTagColor(TAG_COLORS[10]);
+      setTagColor(TAG_COLORS[DEFAULT_COLOR_INDEX]);
       setShowNewTagForm(false);
       setError(null);
       setSaving(false);
@@ -65,35 +70,11 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
       setTags([]);
     }
     setTagName("");
-    setTagColor(TAG_COLORS[10]);
+    setTagColor(TAG_COLORS[DEFAULT_COLOR_INDEX]);
     setShowNewTagForm(false);
     setError(null);
     fetchTags();
   }, [open, card]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [open, onClose]);
-
-  async function fetchTags() {
-    const { data, error: fetchError } = await getSupabase()
-      .from("tags")
-      .select("*")
-      .order("name", { ascending: true });
-
-    if (!fetchError) {
-      setAvailableTags(data ?? []);
-    }
-  }
 
   function isTagSelected(tagDef: TagDefinition): boolean {
     return tags.some((t) => t.name === tagDef.name);
@@ -136,7 +117,7 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
     }
 
     setTagName("");
-    setTagColor(TAG_COLORS[10]);
+    setTagColor(TAG_COLORS[DEFAULT_COLOR_INDEX]);
     setShowNewTagForm(false);
     setError(null);
   }
@@ -332,15 +313,6 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
                         autoFocus
                       />
                     </div>
-                    <div className="relative">
-                      <input
-                        type="color"
-                        value={tagColor}
-                        onChange={(e) => setTagColor(e.target.value)}
-                        className="h-8 w-8 cursor-pointer rounded-full border-0 bg-transparent p-0"
-                        aria-label="选择颜色"
-                      />
-                    </div>
                     <button
                       type="button"
                       onClick={addNewTag}
@@ -354,7 +326,7 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
                       onClick={() => {
                         setShowNewTagForm(false);
                         setTagName("");
-                        setTagColor(TAG_COLORS[10]);
+                        setTagColor(TAG_COLORS[DEFAULT_COLOR_INDEX]);
                       }}
                       className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100"
                       aria-label="取消"
@@ -377,15 +349,7 @@ export default function AddCardModal({ open, card, onClose, onSave }: AddCardMod
                         aria-label={`选择颜色 ${c}`}
                       />
                     ))}
-                    <input
-                      type="color"
-                      value={tagColor}
-                      onChange={(e) => setTagColor(e.target.value)}
-                      className="h-6 w-6 cursor-pointer rounded-full border-0 bg-transparent p-0"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      aria-label="自定义颜色"
-                    />
-                  </div>
+                    </div>
                 </div>
               ) : (
                 <button

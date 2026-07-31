@@ -317,7 +317,7 @@ export default function Home() {
 
       {/* Tag filter bar */}
       {allTags.length > 0 && (
-        <div className="border-b border-white/40 bg-white/40 backdrop-blur-xl animate-fade-in">
+        <div className="border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-sm animate-fade-in">
           <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 sm:px-6 lg:px-8">
             <TagIcon className="h-4 w-4 shrink-0 text-slate-400" />
             <div className="flex flex-wrap gap-1.5">
@@ -328,11 +328,12 @@ export default function Home() {
                     key={tag.id}
                     type="button"
                     onClick={() => toggleFilterTag(tag.name)}
-                    className="rounded-full px-2.5 py-0.5 text-xs font-medium transition"
+                    className="rounded-full px-2.5 py-0.5 text-xs font-semibold transition"
                     style={{
-                      backgroundColor: isActive ? `${tag.color}20` : `${tag.color}10`,
-                      color: isActive ? tag.color : `${tag.color}70`,
-                      border: `1px solid ${isActive ? tag.color : `${tag.color}20`}`,
+                      backgroundColor: isActive ? `${tag.color}30` : `${tag.color}15`,
+                      color: isActive ? "#fff" : tag.color,
+                      border: `1px solid ${isActive ? tag.color : `${tag.color}30`}`,
+                      textShadow: isActive ? "0 1px 2px rgba(0,0,0,0.2)" : "none",
                     }}
                   >
                     {tag.name}
@@ -356,7 +357,7 @@ export default function Home() {
 
       {/* Sort bar */}
       {!loading && !error && cards.length > 0 && (
-        <div className="border-b border-white/40 bg-white/30 backdrop-blur-xl animate-fade-in">
+        <div className="border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-sm animate-fade-in">
           <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 py-2 sm:px-6 lg:px-8">
             <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
             <div className="flex flex-wrap items-center gap-0.5">

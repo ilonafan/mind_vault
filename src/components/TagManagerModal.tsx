@@ -2,15 +2,9 @@
 
 import type { TagDefinition } from "@/types/card";
 import { getSupabase } from "@/lib/supabase";
+import { TAG_COLORS, DEFAULT_COLOR_INDEX } from "@/lib/tag-colors";
 import { Pencil, Plus, Tag as TagIcon, X, Check, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-
-const TAG_COLORS = [
-  "#EF4444", "#F97316", "#F59E0B", "#EAB308", "#84CC16",
-  "#22C55E", "#10B981", "#14B8A6", "#06B6D4", "#3B82F6",
-  "#6366F1", "#8B5CF6", "#A855F7", "#D946EF", "#EC4899",
-  "#F43F5E", "#64748B", "#0EA5E9",
-];
 
 type TagManagerModalProps = {
   open: boolean;
@@ -25,7 +19,8 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
 
   // New tag creation
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(TAG_COLORS[10]);
+  const [newColor, setNewColor] = useState(TAG_COLORS[DEFAULT_COLOR_INDEX]);
+  const [newNameFocused, setNewNameFocused] = useState(false);
 
   // Editing state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,7 +36,7 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
   useEffect(() => {
     if (!open) {
       setNewName("");
-      setNewColor(TAG_COLORS[10]);
+      setNewColor(TAG_COLORS[DEFAULT_COLOR_INDEX]);
       setEditingId(null);
       setDeletingId(null);
       setError(null);
@@ -97,7 +92,7 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
       setError(insertError.message);
     } else {
       setNewName("");
-      setNewColor(TAG_COLORS[10]);
+      setNewColor(TAG_COLORS[DEFAULT_COLOR_INDEX]);
       await fetchTags();
       onTagsChanged();
     }
@@ -286,6 +281,8 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
+                onFocus={() => setNewNameFocused(true)}
+                onBlur={() => setNewNameFocused(false)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -295,15 +292,6 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
                 placeholder="标签名称"
                 className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
               />
-              <div className="relative">
-                <input
-                  type="color"
-                  value={newColor}
-                  onChange={(e) => setNewColor(e.target.value)}
-                  className="h-8 w-8 cursor-pointer rounded-full border-0 bg-transparent p-0"
-                  aria-label="选择颜色"
-                />
-              </div>
               <button
                 type="button"
                 onClick={handleAddTag}
@@ -314,6 +302,24 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
                 添加
               </button>
             </div>
+            {(newNameFocused || newName.trim().length > 0) && (
+              /* Color presets */
+              <div className="flex flex-wrap gap-1.5">
+                {TAG_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setNewColor(c)}
+                    className="h-6 w-6 rounded-full ring-offset-1 transition"
+                    style={{
+                      backgroundColor: c,
+                      boxShadow: newColor === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : undefined,
+                    }}
+                    aria-label={`选择颜色 ${c}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -336,55 +342,66 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
             {tags.map((tag) => (
               <div
                 key={tag.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 transition hover:border-slate-200"
+                className="rounded-xl border border-slate-100 bg-white px-4 py-3 transition hover:border-slate-200"
               >
                 {editingId === tag.id ? (
                   /* Edit mode */
-                  <>
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleSaveEdit();
-                        }
-                        if (e.key === "Escape") {
-                          cancelEdit();
-                        }
-                      }}
-                      className="flex-1 rounded-lg border border-violet-200 bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
-                      autoFocus
-                    />
-                    <input
-                      type="color"
-                      value={editColor}
-                      onChange={(e) => setEditColor(e.target.value)}
-                      className="h-7 w-7 cursor-pointer rounded-full border-0 bg-transparent p-0"
-                      aria-label="选择颜色"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveEdit}
-                      disabled={saving}
-                      className="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50"
-                      aria-label="保存"
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelEdit}
-                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100"
-                      aria-label="取消"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSaveEdit();
+                          }
+                          if (e.key === "Escape") {
+                            cancelEdit();
+                          }
+                        }}
+                        className="flex-1 rounded-lg border border-violet-200 bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveEdit}
+                        disabled={saving}
+                        className="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50"
+                        aria-label="保存"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100"
+                        aria-label="取消"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {/* Color presets in edit mode */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {TAG_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setEditColor(c)}
+                          className="h-6 w-6 rounded-full ring-offset-1 transition"
+                          style={{
+                            backgroundColor: c,
+                            boxShadow: editColor === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : undefined,
+                          }}
+                          aria-label={`选择颜色 ${c}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ) : deletingId === tag.id ? (
                   /* Delete confirmation */
-                  <>
+                  <div className="flex items-center gap-3">
                     <div className="flex flex-1 items-center gap-2">
                       <span
                         className="inline-block h-5 w-5 rounded-full"
@@ -409,10 +426,10 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
                     >
                       取消
                     </button>
-                  </>
+                  </div>
                 ) : (
                   /* Display mode */
-                  <>
+                  <div className="flex items-center gap-3">
                     <div className="flex flex-1 items-center gap-2">
                       <span
                         className="inline-block h-5 w-5 rounded-full"
@@ -436,7 +453,7 @@ export default function TagManagerModal({ open, onClose, onTagsChanged }: TagMan
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             ))}
