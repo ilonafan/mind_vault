@@ -35,6 +35,7 @@ type SortableCardProps = {
   index: number;
   onEdit: (card: Card) => void;
   onDelete: (card: Card) => void;
+  sortMode: "default" | "created_at" | "updated_at";
 };
 
 export default function SortableCard({
@@ -42,6 +43,7 @@ export default function SortableCard({
   index,
   onEdit,
   onDelete,
+  sortMode,
 }: SortableCardProps) {
   const {
     attributes,
@@ -94,13 +96,15 @@ export default function SortableCard({
         </button>
       </div>
 
-      <div
-        className="absolute left-3 top-3 cursor-grab text-slate-300 opacity-0 transition group-hover:opacity-100 active:cursor-grabbing"
-        {...listeners}
-        aria-label="拖拽调整位置"
-      >
-        <GripVertical className="h-4 w-4" />
-      </div>
+      {sortMode === "default" && (
+        <div
+          className="absolute left-3 top-3 cursor-grab text-slate-300 opacity-0 transition group-hover:opacity-100 active:cursor-grabbing"
+          {...listeners}
+          aria-label="拖拽调整位置"
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
+      )}
 
       <h3 className="pl-8 pr-16 text-base font-semibold leading-snug text-slate-900 transition-colors group-hover:text-violet-700">
         {card.title}
@@ -144,10 +148,13 @@ export default function SortableCard({
       )}
 
       <time
-        dateTime={card.created_at}
+        dateTime={sortMode === "updated_at" ? card.updated_at : card.created_at}
         className="mt-4 block text-xs text-slate-400"
       >
-        {formatDate(card.created_at)}
+        {sortMode === "updated_at"
+          ? `更新于 ${formatDate(card.updated_at)}`
+          : `创建于 ${formatDate(card.created_at)}`
+        }
       </time>
     </article>
   );

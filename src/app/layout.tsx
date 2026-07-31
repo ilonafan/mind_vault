@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MindVault 灵感库",
+  title: "Mind Vault",
   description: "收集与管理你的灵感卡片",
 };
 

@@ -6,7 +6,10 @@ import SortableCard from "@/components/SortableCard";
 import TagManagerModal from "@/components/TagManagerModal";
 import { getSupabase } from "@/lib/supabase";
 import type { Card, TagDefinition } from "@/types/card";
-import { Lightbulb, Plus, Sparkles, Tag as TagIcon, Settings2, X } from "lucide-react";
+import {
+  Lightbulb, Plus, Sparkles, Tag as TagIcon, Settings2, X,
+  ArrowUpDown, ArrowUp, ArrowDown,
+} from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -21,6 +24,15 @@ import {
 } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+type SortMode = "default" | "created_at" | "updated_at";
+type SortDirection = "asc" | "desc";
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "default", label: "默认排序" },
+  { value: "created_at", label: "创建时间" },
+  { value: "updated_at", label: "更新时间" },
+];
+
 export default function Home() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +45,10 @@ export default function Home() {
   const [allTags, setAllTags] = useState<TagDefinition[]>([]);
   const [selectedFilterTags, setSelectedFilterTags] = useState<string[]>([]);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
+
+  // Sort state
+  const [sortMode, setSortMode] = useState<SortMode>("default");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -84,6 +100,23 @@ export default function Home() {
     });
   }, [cards, selectedFilterTags]);
 
+  // Sort filtered cards
+  const sortedCards = useMemo(() => {
+    const sorted = [...filteredCards];
+    if (sortMode === "default") {
+      return sorted.sort((a, b) => a.position - b.position);
+    }
+    const field = sortMode;
+    sorted.sort((a, b) => {
+      const dateA = new Date(a[field]).getTime();
+      const dateB = new Date(b[field]).getTime();
+      return sortDirection === "asc" ? dateA - dateB : dateB - dateA;
+    });
+    return sorted;
+  }, [filteredCards, sortMode, sortDirection]);
+
+  const isTimeSort = sortMode !== "default";
+
   function toggleFilterTag(tagName: string) {
     setSelectedFilterTags((prev) =>
       prev.includes(tagName)
@@ -94,6 +127,10 @@ export default function Home() {
 
   function clearFilter() {
     setSelectedFilterTags([]);
+  }
+
+  function toggleDirection() {
+    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
   }
 
   function openCreateModal() {
@@ -112,6 +149,7 @@ export default function Home() {
   }
 
   async function handleSave(data: CardFormData, cardId?: string) {
+    const now = new Date().toISOString();
     const payload = {
       title: data.title,
       content: data.content || null,
@@ -122,7 +160,7 @@ export default function Home() {
     if (cardId) {
       const { data: updated, error: updateError } = await getSupabase()
         .from("cards")
-        .update(payload)
+        .update({ ...payload, updated_at: now })
         .eq("id", cardId)
         .select();
 
@@ -136,7 +174,7 @@ export default function Home() {
       const position = cards.length;
       const { data: inserted, error: insertError } = await getSupabase()
         .from("cards")
-        .insert({ ...payload, position })
+        .insert({ ...payload, position, updated_at: now })
         .select();
 
       if (insertError) throw new Error(insertError.message);
@@ -174,17 +212,26 @@ export default function Home() {
     const newIndex = currentItems.findIndex((item) => item.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
+    // Reorder the array
     const newItems = [...currentItems];
     const [moved] = newItems.splice(oldIndex, 1);
     newItems.splice(newIndex, 0, moved);
 
-    setCards(newItems);
+    // Update position values to match the new order
+    // This is critical: sortedCards sorts by position in default mode,
+    // so we must keep position in sync with the array order
+    const reorderedCards = newItems.map((card, index) => ({
+      ...card,
+      position: index,
+    }));
+
+    setCards(reorderedCards);
 
     try {
-      const updates = newItems.map((card, index) =>
+      const updates = reorderedCards.map((card) =>
         getSupabase()
           .from("cards")
-          .update({ position: index })
+          .update({ position: card.position })
           .eq("id", card.id)
       );
       await Promise.all(updates);
@@ -192,6 +239,42 @@ export default function Home() {
       console.error("Failed to save positions:", err);
       fetchCards();
     }
+  }
+
+  function renderCardGrid() {
+    const grid = (
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {sortedCards.map((card, index) => (
+          <SortableCard
+            key={card.id}
+            card={card}
+            index={index}
+            sortMode={sortMode}
+            onEdit={openEditModal}
+            onDelete={setDeletingCard}
+          />
+        ))}
+      </div>
+    );
+
+    if (isTimeSort) {
+      return grid;
+    }
+
+    return (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={sortedCards.map((card) => card.id)}
+          strategy={rectSortingStrategy}
+        >
+          {grid}
+        </SortableContext>
+      </DndContext>
+    );
   }
 
   return (
@@ -205,7 +288,7 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
-                MindVault 灵感库
+                Mind Vault
               </h1>
               <p className="hidden text-xs text-slate-500 sm:block">收集与管理你的灵感碎片</p>
             </div>
@@ -271,6 +354,45 @@ export default function Home() {
         </div>
       )}
 
+      {/* Sort bar */}
+      {!loading && !error && cards.length > 0 && (
+        <div className="border-b border-white/40 bg-white/30 backdrop-blur-xl animate-fade-in">
+          <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 py-2 sm:px-6 lg:px-8">
+            <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <div className="flex flex-wrap items-center gap-0.5">
+              {SORT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSortMode(opt.value)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                    sortMode === opt.value
+                      ? "bg-violet-100 text-violet-700"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {isTimeSort && (
+              <button
+                type="button"
+                onClick={toggleDirection}
+                className="ml-2 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label={sortDirection === "asc" ? "切换为降序" : "切换为升序"}
+              >
+                {sortDirection === "asc" ? (
+                  <ArrowUp className="h-4 w-4" />
+                ) : (
+                  <ArrowDown className="h-4 w-4" />
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {loading ? (
@@ -293,7 +415,7 @@ export default function Home() {
               重试
             </button>
           </div>
-        ) : filteredCards.length === 0 ? (
+        ) : sortedCards.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-100">
               <Sparkles className="h-8 w-8 text-violet-500" />
@@ -330,28 +452,7 @@ export default function Home() {
             )}
           </div>
         ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={cards.map((card) => card.id)}
-              strategy={rectSortingStrategy}
-            >
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredCards.map((card, index) => (
-                  <SortableCard
-                    key={card.id}
-                    card={card}
-                    index={index}
-                    onEdit={openEditModal}
-                    onDelete={setDeletingCard}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          renderCardGrid()
         )}
       </main>
 

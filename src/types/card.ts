@@ -18,5 +18,6 @@ export type Card = {
   url: string | null;
   tags: Tag[] | null;
   created_at: string;
+  updated_at: string;
   position: number;
 };
