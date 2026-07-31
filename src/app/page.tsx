@@ -8,7 +8,7 @@ import { getSupabase } from "@/lib/supabase";
 import type { Card, TagDefinition } from "@/types/card";
 import {
   Lightbulb, Plus, Sparkles, Tag as TagIcon, Settings2, X,
-  ArrowUpDown, ArrowUp, ArrowDown,
+  ArrowUpDown, ArrowUp, ArrowDown, Search,
 } from "lucide-react";
 import {
   DndContext,
@@ -45,6 +45,37 @@ export default function Home() {
   const [allTags, setAllTags] = useState<TagDefinition[]>([]);
   const [selectedFilterTags, setSelectedFilterTags] = useState<string[]>([]);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // AND filter: card must match search query and ALL selected tags
+  const filteredCards = useMemo(() => {
+    let result = cards;
+
+    // Search filter: match title, content, or url
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((card) => {
+        const titleMatch = card.title.toLowerCase().includes(q);
+        const contentMatch = card.content && card.content.toLowerCase().includes(q);
+        const urlMatch = card.url && card.url.toLowerCase().includes(q);
+        return titleMatch || contentMatch || urlMatch;
+      });
+    }
+
+    // Tag AND filter
+    if (selectedFilterTags.length > 0) {
+      result = result.filter((card) => {
+        if (!card.tags || card.tags.length === 0) return false;
+        const cardTagNames = card.tags.map((t) => t.name);
+        return selectedFilterTags.every((filterTag) => cardTagNames.includes(filterTag));
+      });
+    }
+
+    return result;
+  }, [cards, searchQuery, selectedFilterTags]);
 
   // Sort state
   const [sortMode, setSortMode] = useState<SortMode>("default");
@@ -89,16 +120,6 @@ export default function Home() {
       fetchTags(),
     ]);
   }, [fetchCards, fetchTags]);
-
-  // AND filter: card must have ALL selected tags
-  const filteredCards = useMemo(() => {
-    if (selectedFilterTags.length === 0) return cards;
-    return cards.filter((card) => {
-      if (!card.tags || card.tags.length === 0) return false;
-      const cardTagNames = card.tags.map((t) => t.name);
-      return selectedFilterTags.every((filterTag) => cardTagNames.includes(filterTag));
-    });
-  }, [cards, selectedFilterTags]);
 
   // Sort filtered cards
   const sortedCards = useMemo(() => {
@@ -294,6 +315,49 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <div className="relative">
+              {searchOpen ? (
+                <div className="flex items-center">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onBlur={() => {
+                      if (!searchQuery) setSearchOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setSearchOpen(false);
+                        setSearchQuery("");
+                      }
+                    }}
+                    placeholder="搜索标题、内容、链接..."
+                    className="w-44 rounded-xl border border-slate-200 bg-white px-3 py-2.5 pl-9 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20 sm:w-56"
+                    autoFocus
+                  />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 transition hover:text-slate-600"
+                      aria-label="清除搜索"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-800"
+                  aria-label="搜索"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setTagManagerOpen(true)}
@@ -433,6 +497,20 @@ export default function Home() {
                   className="mt-6 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700"
                 >
                   清除筛选
+                </button>
+              </>
+            ) : searchQuery.trim() ? (
+              <>
+                <h2 className="text-xl font-semibold text-slate-800">没有找到匹配结果</h2>
+                <p className="mt-2 max-w-sm text-sm text-slate-500">
+                  未找到包含「{searchQuery.trim()}」的卡片，试试其他关键词
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(""); setSearchOpen(false); }}
+                  className="mt-6 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-700"
+                >
+                  清除搜索
                 </button>
               </>
             ) : (

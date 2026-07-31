@@ -14,7 +14,7 @@ MindVault 是一个基于 Next.js 16 (App Router) + React 19 + TypeScript + Tail
 
 - 用户认证与多租户隔离（当前 RLS 为公开读写，如需上线需改造为基于 Auth 的隔离策略）
 - ✅ 排序功能：三种模式（默认/创建时间/更新时间）+ 正序/逆序切换
-- 关键词全文搜索
+- ✅ 关键词全文搜索
 - ✅ 卡片标签的颜色/命名统一管理（新增 `tags` 表，TagManagerModal 统一 CRUD，标签改名/改色自动同步到所有卡片）
 - 卡片导出（Markdown / JSON）
 - 暗色主题支持
