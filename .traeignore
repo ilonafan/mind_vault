@@ -1,0 +1,15 @@
+node_modules/
+.next/
+dist/
+package-lock.json
+*.log
+
+# 1. 默认忽略 node_modules 里的所有内容（保护 Context）
+node_modules/*
+
+# 2.【白名单特例】依次放行路径，允许 AI 进去读取 Next.js 的官方文档
+!node_modules/next/
+node_modules/next/*
+!node_modules/next/dist/
+node_modules/next/dist/*
+!node_modules/next/dist/docs/
